@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { FileText, Image, Clock, CheckCircle, AlertTriangle, XCircle, Trash2, RefreshCw, Eye, Sparkles, Loader } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { FileText, Image, Clock, CheckCircle, AlertTriangle, XCircle, Trash2, RefreshCw, Eye, Sparkles, Loader, ShieldCheck, Users } from 'lucide-react'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
@@ -22,16 +23,18 @@ const TYPE_COLORS = {
 }
 
 export default function DocumentsPage() {
+  const navigate = useNavigate()
   const [documents, setDocuments] = useState([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
   const [filterType, setFilterType] = useState('all')
+  const [searchQuery, setSearchQuery] = useState('')
   const [expanded, setExpanded] = useState(null)
   const [extracting, setExtracting] = useState(null)
-  const [llmAvailable, setLlmAvailable] = useState(false)
+  const [llmStatus, setLlmStatus] = useState('unknown')
 
-  const fetchDocuments = useCallback(async () => {
-    setLoading(true)
+  const fetchDocuments = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true)
     try {
       const params = filterType !== 'all' ? `?type=${filterType}&limit=100` : '?limit=100'
       const res = await api.get(`/documents${params}`)
@@ -40,15 +43,51 @@ export default function DocumentsPage() {
     } catch {
       setDocuments([])
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [filterType])
 
   useEffect(() => { fetchDocuments() }, [fetchDocuments])
 
   useEffect(() => {
-    api.get('/llm/status').then(res => setLlmAvailable(res.data.available)).catch(() => {})
+    const handleDataUpdated = () => {
+      fetchDocuments({ silent: true })
+    }
+
+    const handleVisibility = () => {
+      if (!document.hidden) fetchDocuments({ silent: true })
+    }
+
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchDocuments({ silent: true })
+    }, 15000)
+
+    window.addEventListener('docuflow:data-updated', handleDataUpdated)
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('docuflow:data-updated', handleDataUpdated)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [fetchDocuments])
+
+  useEffect(() => {
+    api.get('/llm/status')
+      .then((res) => {
+        const available = res?.data?.available
+        if (typeof available === 'boolean') {
+          setLlmStatus(available ? 'available' : 'unavailable')
+          return
+        }
+        setLlmStatus('unknown')
+      })
+      .catch(() => {
+        setLlmStatus('unknown')
+      })
   }, [])
+
+  const llmAvailable = llmStatus === 'available'
 
   const handleReextract = async (docId, fileName) => {
     setExtracting(docId)
@@ -94,6 +133,26 @@ export default function DocumentsPage() {
   }
 
   const docTypes = ['all', 'facture', 'devis', 'kbis', 'urssaf', 'siret', 'rib', 'inconnu']
+  const normalizedQuery = searchQuery.trim().toLowerCase()
+
+  const visibleDocuments = normalizedQuery
+    ? documents.filter((doc) => {
+      const haystack = [
+        doc.file_name,
+        doc.doc_type,
+        doc.entities?.siret,
+        doc.entities?.raison_sociale,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+
+      return haystack.includes(normalizedQuery)
+    })
+    : documents
+
+  const anomaliesCount = documents.reduce((acc, doc) => acc + (doc.anomalies?.length || 0), 0)
+  const completedCount = documents.filter((doc) => doc.pipeline_status === 'curated').length
 
   return (
     <div>
@@ -105,6 +164,48 @@ export default function DocumentsPage() {
             <RefreshCw size={16} />
           </button>
         </div>
+      </div>
+
+      <div className="hero-strip">
+        <h3 style={{ color: '#f3fbff', margin: 0 }}>Suivi de traitement des documents</h3>
+        <p>
+          Consulte, filtre et controle les extractions OCR/IA en un coup d'oeil.
+        </p>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <span className="badge" style={{ background: 'rgba(255,255,255,0.18)', color: '#f3fbff' }}>
+            Affiches: {visibleDocuments.length}
+          </span>
+          <span className="badge" style={{ background: 'rgba(6,182,138,0.22)', color: '#e9fff8' }}>
+            Finalises: {completedCount}
+          </span>
+          <span className="badge" style={{ background: 'rgba(255,255,255,0.15)', color: '#f3fbff' }}>
+            Anomalies: {anomaliesCount}
+          </span>
+          {llmStatus !== 'unknown' && (
+            <span className="badge" style={{ background: 'rgba(255,255,255,0.15)', color: '#f3fbff' }}>
+              IA: {llmAvailable ? 'Disponible' : 'Optionnelle'}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="card" style={{ marginBottom: 20, padding: 14 }}>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Rechercher par nom de fichier, type, SIRET, raison sociale..."
+          style={{
+            width: '100%',
+            border: '1px solid #d9e3ee',
+            borderRadius: 10,
+            padding: '10px 12px',
+            fontSize: 14,
+            color: '#203140',
+            background: 'rgba(255,255,255,0.85)',
+            outline: 'none',
+          }}
+        />
       </div>
 
       {/* Filtres par type */}
@@ -124,15 +225,15 @@ export default function DocumentsPage() {
       {/* Liste */}
       {loading ? (
         <p style={{ textAlign: 'center', color: '#718096', padding: 40 }}>Chargement...</p>
-      ) : documents.length === 0 ? (
+      ) : visibleDocuments.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: 60, color: '#718096' }}>
           <FileText size={48} color="#CBD5E0" />
-          <p style={{ marginTop: 16 }}>Aucun document trouvé.</p>
-          <p style={{ fontSize: 13 }}>Uploadez des documents pour les voir ici.</p>
+          <p style={{ marginTop: 16 }}>{documents.length === 0 ? 'Aucun document trouve.' : 'Aucun resultat pour cette recherche.'}</p>
+          <p style={{ fontSize: 13 }}>{documents.length === 0 ? 'Uploadez des documents pour les voir ici.' : 'Essaie un autre mot-cle ou un autre filtre.'}</p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {documents.map(doc => {
+          {visibleDocuments.map(doc => {
             const statusConf = STATUS_CONFIG[doc.pipeline_status] || STATUS_CONFIG.raw
             const typeColor = TYPE_COLORS[doc.doc_type] || TYPE_COLORS.inconnu
             const isExpanded = expanded === doc.document_id
@@ -275,6 +376,23 @@ export default function DocumentsPage() {
           })}
         </div>
       )}
+
+      {/* Navigation inter-onglets */}
+      <div style={{
+        marginTop: 28, padding: '16px 20px',
+        background: 'linear-gradient(135deg, #f0f4f8 0%, #e8f0fe 100%)',
+        borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
+      }}>
+        <span style={{ fontSize: 13, color: '#4A5568', fontWeight: 500 }}>Étape suivante dans le flux :</span>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="btn btn-outline" onClick={() => navigate('/conformity')} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            <ShieldCheck size={15} /> Analyser la conformité
+          </button>
+          <button className="btn btn-outline" onClick={() => navigate('/crm')} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            <Users size={15} /> Gérer les fournisseurs
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

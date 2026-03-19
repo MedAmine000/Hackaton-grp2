@@ -1,27 +1,108 @@
+import { useNavigate } from 'react-router-dom'
+import { useEffect } from 'react'
 import { useUploadContext } from '../context/UploadContext'
 import UploadZone from '../components/upload/UploadZone'
-import { RotateCcw } from 'lucide-react'
+import { AlertCircle, CheckCircle, FileText, ShieldCheck } from 'lucide-react'
 
 export default function UploadPage() {
-  const { files, addFiles, removeFile, processFiles, processing, progress, results, reset } = useUploadContext()
+  const navigate = useNavigate()
+  const {
+    files,
+    addFiles,
+    removeFile,
+    processFiles,
+    retryFailedFiles,
+    processing,
+    progress,
+    results,
+    backendAvailable,
+    backendHealth,
+    lastCheckedAt,
+    checkBackendHealth,
+  } = useUploadContext()
+
+  const failedCount = files.filter((f) => f.status === 'error').length
+  const pendingCount = files.filter((f) => f.status === 'pending').length
+  const processingCount = files.filter((f) => f.status === 'processing').length
+  const doneCount = files.filter((f) => f.status === 'done').length
+  const checkedLabel = lastCheckedAt ? new Date(lastCheckedAt).toLocaleTimeString('fr-FR') : '-'
+
+  useEffect(() => {
+    const hasPending = files.some(f => f.status === 'pending')
+    if (hasPending && !processing && backendAvailable !== false) {
+      processFiles()
+    }
+  }, [files, processing, backendAvailable, processFiles])
 
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h1 className="page-title" style={{ marginBottom: 0 }}>Upload de documents</h1>
-        {files.length > 0 && (
-          <button className="btn btn-outline" onClick={reset}>
-            <RotateCcw size={16} /> Réinitialiser
-          </button>
-        )}
       </div>
+
+      <div className="hero-strip">
+        <h3 style={{ color: '#f3fbff', margin: 0 }}>Traitement intelligent automatique</h3>
+        <p>
+          Depose 1 a 10 fichiers (PDF/JPG/PNG). Le pipeline OCR + extraction demarre automatiquement,
+          puis les resultats sont enrichis cote CRM fournisseur.
+        </p>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <span className="badge" style={{ background: 'rgba(255,255,255,0.18)', color: '#f3fbff' }}>
+            Selectionnes: {files.length}/10
+          </span>
+          <span className="badge" style={{ background: 'rgba(255,255,255,0.15)', color: '#f3fbff' }}>
+            En attente: {pendingCount}
+          </span>
+          <span className="badge" style={{ background: 'rgba(255,255,255,0.15)', color: '#f3fbff' }}>
+            En cours: {processingCount}
+          </span>
+          <span className="badge" style={{ background: 'rgba(255,255,255,0.15)', color: '#f3fbff' }}>
+            Erreurs: {failedCount}
+          </span>
+          <span className="badge" style={{ background: 'rgba(6,182,138,0.22)', color: '#e9fff8' }}>
+            Traites: {doneCount}
+          </span>
+        </div>
+      </div>
+
+      {backendAvailable === false && (
+        <div className="card" style={{ marginBottom: 18, borderLeft: '4px solid #d1495b', padding: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#9f2d3f', fontSize: 13, fontWeight: 600 }}>
+              <AlertCircle size={16} />
+              Service indisponible : le traitement automatique est en attente. Vérifiez votre connexion.
+            </div>
+            <button className="btn btn-outline" style={{ padding: '6px 10px', fontSize: 12 }} onClick={checkBackendHealth}>
+              Vérifier
+            </button>
+          </div>
+          <div style={{ marginTop: 8, fontSize: 12, color: '#7f2e3a' }}>
+            Dernière vérification : {checkedLabel}
+          </div>
+        </div>
+      )}
+
+      {backendAvailable === true && failedCount > 0 && (
+        <div className="card" style={{ marginBottom: 18, borderLeft: '4px solid #06b68a', padding: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#0d6a53', fontSize: 13, fontWeight: 600 }}>
+              <CheckCircle size={16} />
+              Service disponible. {failedCount} fichier(s) peuvent être relas maintenant.
+            </div>
+            <button className="btn btn-accent" style={{ padding: '6px 10px', fontSize: 12 }} onClick={retryFailedFiles}>
+              Réessayer les erreurs
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <UploadZone
           files={files}
           onAddFiles={addFiles}
           onRemoveFile={removeFile}
-          onProcess={processFiles}
+          onRetryErrors={retryFailedFiles}
+          backendAvailable={backendAvailable}
           processing={processing}
           progress={progress}
         />
@@ -60,6 +141,27 @@ export default function UploadPage() {
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Navigation inter-onglets - après traitement */}
+      {doneCount > 0 && (
+        <div style={{
+          marginTop: 24, padding: '16px 20px',
+          background: 'linear-gradient(135deg, #f0f4f8 0%, #e8f0fe 100%)',
+          borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
+        }}>
+          <span style={{ fontSize: 13, color: '#4A5568', fontWeight: 500 }}>
+            {doneCount} document(s) traité(s) — étapes suivantes :
+          </span>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="btn btn-outline" onClick={() => navigate('/documents')} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <FileText size={15} /> Voir les documents
+            </button>
+            <button className="btn btn-primary" onClick={() => navigate('/conformity')} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+              <ShieldCheck size={15} /> Vérifier la conformité
+            </button>
           </div>
         </div>
       )}

@@ -1,31 +1,55 @@
-import { useState, useEffect } from 'react'
-import { Search, Building2, CheckCircle, AlertTriangle, XCircle, RefreshCw, Globe, Plus } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { Search, Building2, CheckCircle, AlertTriangle, XCircle, RefreshCw, Globe, Plus, ShieldCheck, Upload } from 'lucide-react'
 import CRMForm from '../components/crm/CRMForm'
 import api from '../services/api'
 import toast from 'react-hot-toast'
 
 export default function CRMPage() {
+  const navigate = useNavigate()
   const [suppliers, setSuppliers] = useState([])
   const [selected, setSelected] = useState(null)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [verifying, setVerifying] = useState(false)
   const [verifyResult, setVerifyResult] = useState(null)
-  const [showAddForm, setShowAddForm] = useState(false)
 
-  const fetchSuppliers = async () => {
+  const fetchSuppliers = useCallback(async ({ silent = false } = {}) => {
     try {
-      setLoading(true)
+      if (!silent) setLoading(true)
       const res = await api.get('/suppliers')
       setSuppliers(res.data)
     } catch {
       setSuppliers([])
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
-  }
+  }, [])
 
-  useEffect(() => { fetchSuppliers() }, [])
+  useEffect(() => { fetchSuppliers() }, [fetchSuppliers])
+
+  useEffect(() => {
+    const handleDataUpdated = () => {
+      fetchSuppliers({ silent: true })
+    }
+
+    const handleVisibility = () => {
+      if (!document.hidden) fetchSuppliers({ silent: true })
+    }
+
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchSuppliers({ silent: true })
+    }, 15000)
+
+    window.addEventListener('docuflow:data-updated', handleDataUpdated)
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('docuflow:data-updated', handleDataUpdated)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [fetchSuppliers])
 
   const filtered = suppliers.filter(s =>
     s.raison_sociale?.toLowerCase().includes(search.toLowerCase()) ||
@@ -112,6 +136,14 @@ export default function CRMPage() {
         </div>
       </div>
 
+      <div className="hero-strip">
+        <h3 style={{ color: '#f3fbff', margin: 0 }}>Verification SIRET et enrichissement CRM</h3>
+        <p>
+          Les donnees fournisseurs sont alimentees par OCR, puis verifiees via l'API gouvernementale
+          pour fiabiliser la base interne.
+        </p>
+      </div>
+
       {/* KPIs */}
       <div className="kpi-grid" style={{ marginBottom: 24 }}>
         <div className="kpi-card">
@@ -144,11 +176,10 @@ export default function CRMPage() {
             <Search size={18} color="#718096" />
             <input
               type="text"
-              placeholder="Rechercher ou vérifier SIREN/SIRET..."
               value={search}
               onChange={e => setSearch(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && /^\d{9,14}$/.test(search.replace(/\s/g, ''))) handleVerifySiren() }}
-              style={{ border: 'none', outline: 'none', flex: 1, fontSize: 14, fontFamily: 'Inter' }}
+              style={{ border: 'none', outline: 'none', flex: 1, fontSize: 14, fontFamily: 'Manrope, sans-serif' }}
             />
             <button
               onClick={handleVerifySiren}
@@ -234,7 +265,7 @@ export default function CRMPage() {
                   }}
                 >
                   <div style={{
-                    width: 40, height: 40, borderRadius: 8,
+                      fontFamily: 'Sora, sans-serif',
                     background: getColor(s.raison_sociale),
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: 'white', fontWeight: 700, fontSize: 14,
@@ -272,6 +303,23 @@ export default function CRMPage() {
               <p style={{ fontSize: 13 }}>Ou utilisez la barre de recherche pour vérifier un SIREN/SIRET.</p>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Navigation inter-onglets */}
+      <div style={{
+        marginTop: 28, padding: '16px 20px',
+        background: 'linear-gradient(135deg, #f0f4f8 0%, #e8f0fe 100%)',
+        borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
+      }}>
+        <span style={{ fontSize: 13, color: '#4A5568', fontWeight: 500 }}>Voir aussi :</span>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="btn btn-outline" onClick={() => navigate('/conformity')} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            <ShieldCheck size={15} /> Dashboard conformité
+          </button>
+          <button className="btn btn-outline" onClick={() => navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            <Upload size={15} /> Uploader des documents
+          </button>
         </div>
       </div>
     </div>

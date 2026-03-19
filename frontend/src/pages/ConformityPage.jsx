@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { AlertCircle, AlertTriangle, Info, Download, Filter, RefreshCw } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { AlertCircle, AlertTriangle, Info, Download, Filter, RefreshCw, Users, Upload } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import api from '../services/api'
 
@@ -10,13 +11,14 @@ const SEVERITY_CONFIG = {
 }
 
 export default function ConformityPage() {
+  const navigate = useNavigate()
   const [anomalies, setAnomalies] = useState([])
   const [stats, setStats] = useState({ total: 0, conformes: 0, alertes: 0, erreurs: 0 })
   const [filterSeverity, setFilterSeverity] = useState('all')
   const [loading, setLoading] = useState(true)
 
-  const fetchData = useCallback(async () => {
-    setLoading(true)
+  const fetchData = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true)
     try {
       const res = await api.get('/validation/results')
       const data = res.data
@@ -26,11 +28,34 @@ export default function ConformityPage() {
       setAnomalies([])
       setStats({ total: 0, conformes: 0, alertes: 0, erreurs: 0 })
     } finally {
-      setLoading(false)
+      if (!silent) setLoading(false)
     }
   }, [])
 
   useEffect(() => { fetchData() }, [fetchData])
+
+  useEffect(() => {
+    const handleDataUpdated = () => {
+      fetchData({ silent: true })
+    }
+
+    const handleVisibility = () => {
+      if (!document.hidden) fetchData({ silent: true })
+    }
+
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchData({ silent: true })
+    }, 15000)
+
+    window.addEventListener('docuflow:data-updated', handleDataUpdated)
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('docuflow:data-updated', handleDataUpdated)
+      document.removeEventListener('visibilitychange', handleVisibility)
+    }
+  }, [fetchData])
 
   const filtered = filterSeverity === 'all'
     ? anomalies
@@ -45,13 +70,67 @@ export default function ConformityPage() {
 
   const conformePercent = stats.total > 0 ? Math.round((stats.conformes / stats.total) * 100) : 0
 
+  const handleExportCsv = () => {
+    if (filtered.length === 0) return
+
+    const headers = ['severity', 'rule_id', 'message', 'documents']
+    const rows = filtered.map((a) => [
+      a.severity || '',
+      a.rule_id || '',
+      (a.message || '').replace(/\r?\n|\r/g, ' ').trim(),
+      (a.concerned_document_ids || []).join('|'),
+    ])
+
+    const escapeCell = (value) => {
+      const raw = String(value ?? '')
+      if (raw.includes(',') || raw.includes('"')) {
+        return `"${raw.replace(/"/g, '""')}"`
+      }
+      return raw
+    }
+
+    const csvContent = [headers, ...rows]
+      .map((line) => line.map(escapeCell).join(','))
+      .join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `anomalies_${filterSeverity.toLowerCase()}_${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h1 className="page-title" style={{ marginBottom: 0 }}>Dashboard Conformité</h1>
-        <button className="btn btn-outline" onClick={fetchData} title="Rafraîchir">
-          <RefreshCw size={16} />
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button className="btn btn-outline" onClick={fetchData} title="Rafraîchir">
+            <RefreshCw size={16} />
+          </button>
+        </div>
+      </div>
+
+      <div className="hero-strip">
+        <h3 style={{ color: '#f3fbff', margin: 0 }}>Pilotage des risques documentaires</h3>
+        <p>
+          Priorise les anomalies critiques, filtre par severite et exporte la vue active en CSV.
+        </p>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <span className="badge" style={{ background: 'rgba(255,255,255,0.18)', color: '#f3fbff' }}>
+            Total anomalies: {anomalies.length}
+          </span>
+          <span className="badge" style={{ background: 'rgba(6,182,138,0.22)', color: '#e9fff8' }}>
+            Conformite: {conformePercent}%
+          </span>
+          <span className="badge" style={{ background: 'rgba(255,255,255,0.15)', color: '#f3fbff' }}>
+            Vue active: {filtered.length}
+          </span>
+        </div>
       </div>
 
       {/* KPIs */}
@@ -105,7 +184,7 @@ export default function ConformityPage() {
             </button>
           ))}
         </div>
-        <button className="btn btn-outline" style={{ fontSize: 12 }}>
+        <button className="btn btn-outline" style={{ fontSize: 12 }} onClick={handleExportCsv} disabled={filtered.length === 0}>
           <Download size={14} /> Export CSV
         </button>
       </div>
@@ -167,6 +246,23 @@ export default function ConformityPage() {
           })}
         </div>
       )}
+
+      {/* Navigation inter-onglets */}
+      <div style={{
+        marginTop: 28, padding: '16px 20px',
+        background: 'linear-gradient(135deg, #f0f4f8 0%, #e8f0fe 100%)',
+        borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12,
+      }}>
+        <span style={{ fontSize: 13, color: '#4A5568', fontWeight: 500 }}>Voir aussi :</span>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button className="btn btn-outline" onClick={() => navigate('/crm')} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            <Users size={15} /> Gérer les fournisseurs
+          </button>
+          <button className="btn btn-outline" onClick={() => navigate('/')} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+            <Upload size={15} /> Uploader des documents
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

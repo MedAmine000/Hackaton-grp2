@@ -1,6 +1,6 @@
 # DocuFlow - Hackathon 2026
 
-## 📌 Contexte
+##  Contexte
 **Projet :** Validation automatique de documents administratifs fournisseurs avec orchestration Data Lake + Airflow.  
 **Cadre :** Hackathon 2026.  
 **Classe :** Mastère (M1 & M2).  
@@ -11,7 +11,7 @@ Pipeline production-ready couvrant ingestion documentaire, extraction OCR, valid
 
 ---
 
-## 👥 Équipe & Contributions
+##  Équipe & Contributions
 
 | # | Rôle | Nom | Livrables clés | Technologies | Ports / Services |
 |---|------|-----|----------------|--------------|------------------|
@@ -24,7 +24,7 @@ Pipeline production-ready couvrant ingestion documentaire, extraction OCR, valid
 
 ---
 
-## 🔄 Flux de Données Complet
+##  Flux de Données Complet
 
 ```
 Upload documents (Front)
@@ -44,7 +44,7 @@ Orchestration & Monitoring (Airflow :8080)
 
 ---
 
-## 🛠️ Stack Technique
+##  Stack Technique
 
 ### Frontend & API
 - React 18, Vite
@@ -65,7 +65,7 @@ Orchestration & Monitoring (Airflow :8080)
 
 ---
 
-## ⚙️ Configuration de l'environnement
+##  Configuration de l'environnement
 
 Un fichier `.env.example` est fourni à la racine et contient toutes les variables nécessaires.  
 **Ne jamais committer le fichier `.env` — il est exclu par `.gitignore`.**
@@ -78,7 +78,7 @@ cp .env.example .env
 
 ---
 
-## 🚀 Lancement du Projet
+##  Lancement du Projet
 
 ```bash
 # 1) Cloner
@@ -104,7 +104,7 @@ docker compose ps
 
 ---
 
-## 💡 Décisions Architecturales
+##  Décisions Architecturales
 
 ### 1. Chaîne documentaire orientée fiabilité
 - Upload -> OCR -> Validation -> Curation -> Sync métier.
@@ -123,7 +123,7 @@ docker compose ps
 
 ---
 
-## 📈 Résultats & Impact
+##  Résultats & Impact
 
 - Traitement automatique de documents administratifs fournisseurs de bout en bout.
 - CRM auto-rempli et dashboard conformité connectés au pipeline.
@@ -132,7 +132,7 @@ docker compose ps
 
 ---
 
-## 🎓 Compétences Démontrées
+##  Compétences Démontrées
 
 - Architecture Data Lake appliquée à un cas documentaire réel.
 - OCR + extraction d'entités + validation multi-règles.
@@ -142,7 +142,7 @@ docker compose ps
 
 ---
 
-## 📂 Fichiers Livrés (principaux)
+##  Fichiers Livrés (principaux)
 
 - `README.md`
 - `docker-compose.yml`
@@ -157,7 +157,7 @@ docker compose ps
 
 ---
 
-## 👤 Auteurs
+##  Auteurs
 
 Projet réalisé en équipe : **Tahina, Abdelmalek, Yanis, Hassan, Wael, Korniti**.
 
